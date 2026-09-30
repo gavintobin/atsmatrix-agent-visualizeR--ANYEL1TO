@@ -9,6 +9,7 @@ from backend.alpaca_market import AlpacaMarketData
 from backend.market_indicators import build_market_snapshot
 from backend.agents import MarketAgent,OptionsAgent
 from backend.alpaca_options import AlpacaOptionsData
+from backend.alpaca_news import AlpacaNewsData
 from backend.orchestrator import TradingOrchestrator
 
 app=FastAPI(title="ATSMATRIX Alpaca QQQ Paper Trader",version="0.2.0")
@@ -55,6 +56,30 @@ async def qqq_options():
       "data":{"direction":signal.direction.value,"confidence":signal.confidence,**signal.evidence}})
     return {"symbol":s.symbol,"feed":s.alpaca_option_feed,"market_signal":market,
       "contracts_scanned":len(candidates),"signal":signal,"selected":selected}
+
+@app.get("/api/v1/news/qqq")
+async def qqq_news():
+    from backend.agents import NewsAgent
+    s=get_settings()
+    await event_bus.publish({"type":"agent","agent":"news","status":"ANALYZING","message":"Fetching recent QQQ/index news from Alpaca"})
+    articles=AlpacaNewsData(s).recent()
+    signal=NewsAgent().analyze({"articles":articles})
+    await event_bus.publish({"type":"agent","agent":"news","status":"COMPLETE","message":signal.summary,
+      "data":{"direction":signal.direction.value,"confidence":signal.confidence,**signal.evidence}})
+    return {"symbol":s.symbol,"articles":articles,"signal":signal}
+
+@app.post("/api/v1/live-cycle")
+async def live_cycle():
+    s=get_settings()
+    await event_bus.publish({"type":"agent","agent":"orchestrator","status":"RUNNING","message":"Gathering live Alpaca inputs"})
+    market_snapshot=build_market_snapshot(AlpacaMarketData(s).bars())
+    market=MarketAgent().analyze(market_snapshot)
+    articles=AlpacaNewsData(s).recent()
+    candidates=[] if market.direction.value=="NEUTRAL" else AlpacaOptionsData(s).candidates(market_snapshot["price"],market.direction.value)
+    async def emit(event):await event_bus.publish(event)
+    engine=TradingOrchestrator(s,emit=emit)
+    return await engine.run_cycle(market_snapshot=market_snapshot,news_snapshot={"articles":articles},
+      option_candidates=candidates,open_positions=0,daily_pnl=0)
 
 @app.get("/api/v1/events")
 def events():return {"events":event_bus.history}
