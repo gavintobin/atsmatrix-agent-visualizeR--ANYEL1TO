@@ -63,3 +63,44 @@ graph TD
     style C3 fill:#4c0519,stroke:#f43f5e,stroke-width:2px,color:#fff
     style C4 fill:#0c4a6e,stroke:#38bdf8,stroke-width:2px,color:#fff
     style DELIVERABLE fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#fff
+
+
+---
+
+## QQQ Alpaca Multi-Agent Paper Trader (starter)
+
+This fork now includes a Python backend that turns the visualizer into the foundation for a QQQ options paper-trading system.
+
+### Safety model
+
+- **Alpaca is the broker and market-data platform.**
+- The starter refuses live mode: `ALPACA_PAPER=false` raises an error.
+- `TRADING_ENABLED=false` is the default, so approved orders are dry-runs until explicitly enabled.
+- Market, news, and options agents produce structured analysis only.
+- A deterministic `RiskEngine` gates every order.
+- Only `AlpacaPaperExecutor` can submit an order.
+- API keys belong in local `.env`; `.env` is gitignored.
+
+### Agents
+
+`MarketAgent` evaluates QQQ technical state (starter ORB/VWAP/relative-volume logic). `NewsAgent` normalizes a supplied news sentiment snapshot. `OptionsAgent` filters call/put candidates and favors tighter spreads / delta near 0.55 when available. `StrategyAgent` combines the structured signals. These are deliberately simple v0 components intended for paper testing and measurement, not claims of profitability.
+
+### Run locally (Windows PowerShell)
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m pytest
+python -m uvicorn backend.main:app --reload
+```
+
+Then open `http://127.0.0.1:8000/health`. Keep `TRADING_ENABLED=false` initially. After adding **paper** Alpaca credentials and validating dry-run behavior, setting it to `true` permits risk-approved paper option orders.
+
+### Next implementation phases
+
+1. Pull QQQ bars, snapshots, option chains/Greeks, account state and news directly from Alpaca instead of accepting snapshots through the API.
+2. Add persistent decision/order telemetry and connect it to the existing ATSMATRIX frontend.
+3. Add fill/position management, exits, session controls and stronger contract-selection rules.
+4. Backtest/replay the exact strategy and then run extended paper tests before changing any risk parameters.
