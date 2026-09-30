@@ -104,3 +104,16 @@ Then open `http://127.0.0.1:8000/health`. Keep `TRADING_ENABLED=false` initially
 2. Add persistent decision/order telemetry and connect it to the existing ATSMATRIX frontend.
 3. Add fill/position management, exits, session controls and stronger contract-selection rules.
 4. Backtest/replay the exact strategy and then run extended paper tests before changing any risk parameters.
+
+
+### Live ATSMATRIX trading dashboard
+
+FastAPI now serves the existing visualizer at the application root and streams actual orchestrator telemetry over `/ws`. Start the backend:
+
+```powershell
+python -m uvicorn backend.main:app --reload
+```
+
+Open `http://127.0.0.1:8000` (not the standalone HTML file). The QQQ Agent Control panel shows Market, News, Options, Strategy, Risk and Execution state in real time. The browser reconnects automatically if the WebSocket drops.
+
+For a development smoke test, POST a cycle to `/api/v1/cycle`; the dashboard will animate and log each real backend stage. Until live Alpaca data ingestion is added, that endpoint accepts explicit market/news/options snapshots. Order execution remains dry-run unless `TRADING_ENABLED=true`, and the backend still refuses non-paper mode.
