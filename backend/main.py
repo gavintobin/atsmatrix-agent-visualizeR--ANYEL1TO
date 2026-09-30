@@ -5,6 +5,9 @@ from pydantic import BaseModel,Field
 from backend.config import get_settings
 from backend.events import event_bus
 from backend.models import OptionCandidate
+from backend.alpaca_market import AlpacaMarketData
+from backend.market_indicators import build_market_snapshot
+from backend.agents import MarketAgent
 from backend.orchestrator import TradingOrchestrator
 
 app=FastAPI(title="ATSMATRIX Alpaca QQQ Paper Trader",version="0.2.0")
@@ -25,6 +28,16 @@ def health():
     s=get_settings()
     return {"status":"ok","broker":"alpaca","mode":"paper","trading_enabled":s.trading_enabled,
             "symbol":s.symbol,"option_feed":s.alpaca_option_feed}
+
+@app.get("/api/v1/market/qqq")
+async def qqq_market():
+    s=get_settings()
+    await event_bus.publish({"type":"agent","agent":"market","status":"ANALYZING","message":"Fetching QQQ minute bars from Alpaca"})
+    snapshot=build_market_snapshot(AlpacaMarketData(s).bars())
+    signal=MarketAgent().analyze(snapshot)
+    await event_bus.publish({"type":"agent","agent":"market","status":"COMPLETE","message":signal.summary,
+      "data":{"direction":signal.direction.value,"confidence":signal.confidence,**signal.evidence}})
+    return {"symbol":s.symbol,"feed":s.alpaca_stock_feed,"snapshot":snapshot,"signal":signal}
 
 @app.get("/api/v1/events")
 def events():return {"events":event_bus.history}
