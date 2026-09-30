@@ -1,10 +1,26 @@
 from statistics import mean
 from backend.models import AgentSignal,Direction,OptionCandidate,TradeProposal
+
 class MarketAgent:
     def analyze(self,s):
-        p=float(s.get("price",0));v=float(s.get("vwap",p));hi=float(s.get("orb_high",p));lo=float(s.get("orb_low",p));rv=float(s.get("relative_volume",1))
-        d,b=(Direction.bullish,.72) if p>hi and p>v else (Direction.bearish,.72) if p<lo and p<v else (Direction.neutral,.45)
-        return AgentSignal(agent="market",direction=d,confidence=min(.95,b+max(0,rv-1)*.05),summary=f"QQQ technical state: {d.value}",evidence={"price":p,"vwap":v,"orb_high":hi,"orb_low":lo,"relative_volume":rv})
+        p=float(s.get("price",0));v=float(s.get("vwap",p));hi=float(s.get("orb_high",p));lo=float(s.get("orb_low",p))
+        rv=float(s.get("relative_volume",1));rsi=s.get("rsi");mom=float(s.get("momentum_5m",0))
+        bull=0;bear=0;reasons=[]
+        if p>v:bull+=1;reasons.append("price above VWAP")
+        elif p<v:bear+=1;reasons.append("price below VWAP")
+        if p>hi:bull+=2;reasons.append("above 5-minute opening range")
+        elif p<lo:bear+=2;reasons.append("below 5-minute opening range")
+        if mom>.001:bull+=1;reasons.append("positive 5-minute momentum")
+        elif mom<-.001:bear+=1;reasons.append("negative 5-minute momentum")
+        if rsi is not None:
+            if 52<=rsi<=75:bull+=.5
+            elif 25<=rsi<=48:bear+=.5
+        edge=abs(bull-bear);d=Direction.bullish if bull>bear else Direction.bearish if bear>bull else Direction.neutral
+        confidence=min(.92,.45+edge*.09+(min(max(rv-1,0),2)*.04)) if d!=Direction.neutral else .40
+        evidence={**s,"bull_score":bull,"bear_score":bear,"reasons":reasons}
+        return AgentSignal(agent="market",direction=d,confidence=confidence,
+          summary=f"QQQ technical state: {d.value} ({', '.join(reasons) or 'no directional confirmation'})",evidence=evidence)
+
 class NewsAgent:
     def analyze(self,n):
         x=float(n.get("sentiment",0));d=Direction.bullish if x>=.2 else Direction.bearish if x<=-.2 else Direction.neutral
