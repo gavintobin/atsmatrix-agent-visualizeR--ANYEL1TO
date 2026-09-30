@@ -124,3 +124,10 @@ For a development smoke test, POST a cycle to `/api/v1/cycle`; the dashboard wil
 With Alpaca paper credentials in `.env`, call `GET /api/v1/market/qqq` to fetch QQQ 1-minute bars and run the Market Agent. It calculates session VWAP, the 09:30-09:35 ET opening range, relative volume against up to five prior comparable sessions, 14-period RSI and 5-minute momentum. The result is also emitted over `/ws` to the ATSMATRIX dashboard.
 
 Use `ALPACA_STOCK_FEED=iex` for the Basic/free real-time feed. Set it to `sip` only when the account has current SIP entitlement.
+
+
+### Remaining live agents
+
+- `GET /api/v1/news/qqq` fetches recent Alpaca news and runs the News Agent.
+- `POST /api/v1/live-cycle` gathers live QQQ market bars, recent news and the option chain, then runs Market -> News -> Options -> Strategy -> Risk -> Execution telemetry.
+- Execution stays `DRY_RUN` while `TRADING_ENABLED=false`. Keep this setting during development. The risk engine remains deterministic and is the only gate before the paper executor.
