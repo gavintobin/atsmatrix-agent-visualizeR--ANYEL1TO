@@ -117,3 +117,10 @@ python -m uvicorn backend.main:app --reload
 Open `http://127.0.0.1:8000` (not the standalone HTML file). The QQQ Agent Control panel shows Market, News, Options, Strategy, Risk and Execution state in real time. The browser reconnects automatically if the WebSocket drops.
 
 For a development smoke test, POST a cycle to `/api/v1/cycle`; the dashboard will animate and log each real backend stage. Until live Alpaca data ingestion is added, that endpoint accepts explicit market/news/options snapshots. Order execution remains dry-run unless `TRADING_ENABLED=true`, and the backend still refuses non-paper mode.
+
+
+### Market Agent: live QQQ data
+
+With Alpaca paper credentials in `.env`, call `GET /api/v1/market/qqq` to fetch QQQ 1-minute bars and run the Market Agent. It calculates session VWAP, the 09:30-09:35 ET opening range, relative volume against up to five prior comparable sessions, 14-period RSI and 5-minute momentum. The result is also emitted over `/ws` to the ATSMATRIX dashboard.
+
+Use `ALPACA_STOCK_FEED=iex` for the Basic/free real-time feed. Set it to `sip` only when the account has current SIP entitlement.
