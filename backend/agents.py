@@ -27,10 +27,18 @@ class NewsAgent:
         return AgentSignal(agent="news",direction=d,confidence=min(.9,.5+abs(x)*.4),summary=n.get("summary","No material news catalyst supplied."),evidence={"sentiment":x,"headlines":n.get("headlines",[])[:10]})
 class OptionsAgent:
     def analyze(self,cs:list[OptionCandidate],d:Direction):
-        want="call" if d==Direction.bullish else "put";valid=[c for c in cs if c.option_type.lower()==want and c.bid>0 and c.ask>=c.bid]
-        if not valid or d==Direction.neutral:return AgentSignal(agent="options",confidence=.3,summary="No suitable option candidate."),None
-        c=min(valid,key=lambda x:(x.spread_pct,abs((x.delta if x.delta is not None else .55)-.55)))
-        return AgentSignal(agent="options",direction=d,confidence=max(.3,min(.95,1-c.spread_pct*3)),summary=f"Selected {c.symbol}.",evidence={"spread_pct":c.spread_pct}),c
+        want="call" if d==Direction.bullish else "put"
+        valid=[c for c in cs if c.option_type.lower()==want and c.bid>0 and c.ask>=c.bid and c.spread_pct<=.12]
+        if d==Direction.neutral:return AgentSignal(agent="options",confidence=.2,summary="Neutral market signal; no directional option selected.",evidence={"scanned":len(cs),"eligible":0}),None
+        if not valid:return AgentSignal(agent="options",direction=d,confidence=.25,summary="No option passed quote/spread filters.",evidence={"scanned":len(cs),"eligible":0}),None
+        def score(x):
+            delta_penalty=abs(abs(x.delta)-.55) if x.delta is not None else .20
+            return x.spread_pct*3+delta_penalty+abs(x.strike-cs[0].strike)*0
+        c=min(valid,key=score)
+        confidence=max(.35,min(.95,1-c.spread_pct*3-(abs(abs(c.delta)-.55) if c.delta is not None else .15)))
+        return AgentSignal(agent="options",direction=d,confidence=confidence,summary=f"Selected {c.symbol}.",
+          evidence={"scanned":len(cs),"eligible":len(valid),"symbol":c.symbol,"expiration":c.expiration,"strike":c.strike,
+          "bid":c.bid,"ask":c.ask,"spread_pct":c.spread_pct,"delta":c.delta,"iv":c.iv}),c
 class StrategyAgent:
     def synthesize(self,ss,option):
         ds=[s for s in ss if s.direction!=Direction.neutral]
