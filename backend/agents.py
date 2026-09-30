@@ -22,9 +22,27 @@ class MarketAgent:
           summary=f"QQQ technical state: {d.value} ({', '.join(reasons) or 'no directional confirmation'})",evidence=evidence)
 
 class NewsAgent:
+    POSITIVE=("beat","surge","rally","upgrade","record","strong","growth","gain","bullish","optimism")
+    NEGATIVE=("miss","drop","fall","downgrade","weak","warning","probe","lawsuit","tariff","selloff","cuts","bearish")
     def analyze(self,n):
-        x=float(n.get("sentiment",0));d=Direction.bullish if x>=.2 else Direction.bearish if x<=-.2 else Direction.neutral
-        return AgentSignal(agent="news",direction=d,confidence=min(.9,.5+abs(x)*.4),summary=n.get("summary","No material news catalyst supplied."),evidence={"sentiment":x,"headlines":n.get("headlines",[])[:10]})
+        articles=n.get("articles",[])
+        if not articles:
+            x=float(n.get("sentiment",0));summary=n.get("summary","No material recent news catalyst.")
+            d=Direction.bullish if x>=.2 else Direction.bearish if x<=-.2 else Direction.neutral
+            return AgentSignal(agent="news",direction=d,confidence=min(.85,.45+abs(x)*.35),summary=summary,evidence={"sentiment":x,"headlines":n.get("headlines",[])[:10]})
+        score=0;hits=[]
+        for a in articles:
+            text=(a.get("headline","")+" "+a.get("summary","")).lower()
+            p=sum(1 for w in self.POSITIVE if w in text);q=sum(1 for w in self.NEGATIVE if w in text)
+            score+=p-q
+            if p or q:hits.append({"headline":a.get("headline",""),"score":p-q,"symbols":a.get("symbols",[])})
+        denom=max(3,len(articles));x=max(-1,min(1,score/denom))
+        d=Direction.bullish if x>=.2 else Direction.bearish if x<=-.2 else Direction.neutral
+        confidence=min(.82,.45+abs(x)*.30)
+        return AgentSignal(agent="news",direction=d,confidence=confidence,
+          summary=f"Recent news tone: {d.value}; {len(articles)} articles scanned.",
+          evidence={"sentiment":x,"article_count":len(articles),"catalysts":hits[:10],
+                    "headlines":[a.get("headline","") for a in articles[:10]]})
 class OptionsAgent:
     def analyze(self,cs:list[OptionCandidate],d:Direction):
         want="call" if d==Direction.bullish else "put"
