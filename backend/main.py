@@ -7,7 +7,8 @@ from backend.events import event_bus
 from backend.models import OptionCandidate
 from backend.alpaca_market import AlpacaMarketData
 from backend.market_indicators import build_market_snapshot
-from backend.agents import MarketAgent
+from backend.agents import MarketAgent,OptionsAgent
+from backend.alpaca_options import AlpacaOptionsData
 from backend.orchestrator import TradingOrchestrator
 
 app=FastAPI(title="ATSMATRIX Alpaca QQQ Paper Trader",version="0.2.0")
@@ -38,6 +39,22 @@ async def qqq_market():
     await event_bus.publish({"type":"agent","agent":"market","status":"COMPLETE","message":signal.summary,
       "data":{"direction":signal.direction.value,"confidence":signal.confidence,**signal.evidence}})
     return {"symbol":s.symbol,"feed":s.alpaca_stock_feed,"snapshot":snapshot,"signal":signal}
+
+@app.get("/api/v1/options/qqq")
+async def qqq_options():
+    s=get_settings()
+    await event_bus.publish({"type":"agent","agent":"options","status":"SCANNING","message":"Fetching QQQ option chain from Alpaca"})
+    snapshot=build_market_snapshot(AlpacaMarketData(s).bars())
+    market=MarketAgent().analyze(snapshot)
+    if market.direction.value=="NEUTRAL":
+        signal,selected=OptionsAgent().analyze([],market.direction)
+        return {"symbol":s.symbol,"feed":s.alpaca_option_feed,"market_signal":market,"signal":signal,"selected":selected}
+    candidates=AlpacaOptionsData(s).candidates(snapshot["price"],market.direction.value)
+    signal,selected=OptionsAgent().analyze(candidates,market.direction)
+    await event_bus.publish({"type":"agent","agent":"options","status":"COMPLETE","message":signal.summary,
+      "data":{"direction":signal.direction.value,"confidence":signal.confidence,**signal.evidence}})
+    return {"symbol":s.symbol,"feed":s.alpaca_option_feed,"market_signal":market,
+      "contracts_scanned":len(candidates),"signal":signal,"selected":selected}
 
 @app.get("/api/v1/events")
 def events():return {"events":event_bus.history}
